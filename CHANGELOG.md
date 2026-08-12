@@ -1,0 +1,32 @@
+# Changelog
+
+All notable changes will be documented here. The project follows semantic
+versioning after its public alpha begins.
+
+## [Unreleased]
+
+### Added
+
+- Secure, bounded, versioned message envelope and transport-neutral service.
+- ENet and WebSocket adapters with two-process conformance fixtures.
+- Provider-gated Steam and WebRTC adapter surfaces.
+- `P2PNetwork` and `P2PLobby` compatibility autoloads.
+- Authority-owned lobby chat, replicated state, and explicit entity
+  replication.
+- Roles, scoped capabilities, optional exact-address and identity bans, and
+  guarded CIDR bans.
+- Quickstart project, test runner, package script, migration guide, security
+  documentation, and fork provenance.
+
+### Changed
+
+- Replaced the upstream trust and synchronization model rather than preserving
+  wire compatibility.
+- Unsafe arbitrary remote method, signal, property, scene, and node operations
+  fail closed while online.
+
+### Security
+
+- Network frames never deserialize arbitrary Variants or objects.
+- Direction, authority, channel, delivery, sequence, size, rate, and capability
+  checks run before local message dispatch.

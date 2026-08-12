@@ -1,0 +1,37 @@
+; RedotP2PNetwork development and conformance fixture.
+; The distributable addon remains under addons/redot_p2p_network.
+config_version=5
+
+[application]
+
+config/name="RedotP2PNetwork Development"
+config/description="Development and conformance fixture for the RedotP2PNetwork addon."
+run/main_scene="res://examples/quickstart/main.tscn"
+
+[autoload]
+
+P2PNetwork="*res://addons/redot_p2p_network/compat/p2p_network.gd"
+P2PLobby="*res://addons/redot_p2p_network/compat/p2p_lobby.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/resizable=true
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/redot_p2p_network/plugin.cfg")
+
+[debug]
+
+gdscript/warnings/untyped_declaration=1
+gdscript/warnings/unsafe_method_access=1
+gdscript/warnings/unsafe_property_access=1
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

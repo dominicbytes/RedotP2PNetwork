@@ -1,117 +1,139 @@
-# GodotP2PNetwork
+# RedotP2PNetwork
 
-## Summary
-GodotP2PNetwork adds a network/lobby layer over existing networking infrastructure. Currently we Support
-- [https://github.com/CoaguCo-Industries/GodotSteam](https://github.com/CoaguCo-Industries/GodotSteam)
+RedotP2PNetwork is a security-first Redot adaptation of
+[DawnGroveStudios/GodotP2PNetwork](https://github.com/DawnGroveStudios/GodotP2PNetwork).
+It provides a transport-neutral multiplayer service, compatibility facades for
+the original `P2PNetwork` and `P2PLobby` names, bounded lobby chat, replicated
+state, explicit entity replication, capability checks, and optional IP or
+identity bans.
 
-#### Future Plans to Support:
-- Native Godot Networking
-- Peer to Peer Proxy server
-	- To avoid having players have to port forward to play with friends
+This repository is an **alpha implementation for Redot 26.2**. It is suitable
+for development and local integration testing, not a claim that every planned
+transport or production deployment profile is certified.
 
+## Current capability status
 
-## Plugins
+| Surface | Status | Evidence and limits |
+|---|---|---|
+| Secure protocol core | Implemented | Strict binary envelope, registered message allowlist, sender direction, channel/delivery checks, replay rejection, per-peer rate limits, bounded work, and violation disconnects are unit tested. |
+| ENet | Implemented | Native two-process core and facade fixtures pass on Windows with Redot 26.2. |
+| WebSocket | Implemented | Native two-process core and facade fixtures pass on loopback. Plain `ws://` is loopback-only and opt-in; production requires TLS/WSS and deployment qualification. |
+| Steam | Provider-gated alpha | Adapter and dynamic `dominicbytes/redot-steam` provider compile without making RedotSteam mandatory. A live private-App-ID authentication fixture is not yet certified. |
+| WebRTC | Provider-gated alpha | Authority-star adapter and replaceable signaling, ICE, and peer-factory contracts are present. The installed Redot build has no usable default WebRTC backend, so a real provider fixture is still required. |
+| Lobby discovery directory | Not implemented | Direct/current-lobby behavior works. Public discovery and the optional self-hostable directory remain later milestones. |
+| Persistent moderation | Not implemented | In-memory exact address, identity, and guarded CIDR bans are implemented. Persistence and report storage require future provider contracts. |
 
-### Optional - Highly recommend since this is the only working Networking layer currently
-- Steam
-	- [https://github.com/CoaguCo-Industries/GodotSteam](https://github.com/CoaguCo-Industries/GodotSteam)
-	- [https://godotsteam.com/](https://godotsteam.com/)
+See [transport status](docs/transports.md), the
+[upstream compatibility matrix](docs/compatibility/upstream-api.md), and the
+[threat model](docs/security/threat-model.md) before adopting the alpha.
 
+## Install
 
-## Features
-- RPC Signals
-	- Send singals to any connected clients
-- RPC Method
-	- Make method calls on any connected clients
-- RPC Sync
-	- Sync Objects Across all clients
-- Network Lobby
-- Network Chat
-- Lobby Search
-- Configurable Network timing
-- Allow for client side processing with period server syncs to reduce network load
+1. Copy `addons/redot_p2p_network` into the target Redot project's `addons/`
+   directory.
+2. Enable **RedotP2PNetwork** in **Project Settings > Plugins**.
+3. Confirm the plugin registered the `P2PNetwork` and `P2PLobby` autoloads. It
+   will not overwrite autoloads that already use those names.
 
-## Singletons
-- `P2PNetwork`
-- `P2PLobby`
+The development project in this repository opens a keyboard-operable
+quickstart scene with ENet and explicit loopback WebSocket controls.
 
-
-
-## Example
-- [GodotP2PNetworkExample](https://github.com/DawnGroveStudios/GodotP2PNetworkExample)
-
-
-## RPC Signal
+## Minimal ENet session
 
 ```gdscript
-P2PNetwork.rpc_emit_signal(object,"SingalName")
-P2PNetwork.rpc_emit_signal(object,"SingalName",[args])
+# Listen host.
+var error: Error = P2PNetwork.host_enet(7777, 16, "*")
+
+# Client.
+var error: Error = P2PNetwork.join_enet("127.0.0.1", 7777)
 ```
 
-Example
-```gdscript
-P2PNetwork.rpc_emit_signal(SignalBus,"Explosion",[damage,damage_type])
-```
+## Register messages explicitly
 
-## RPC Method
-
-```gdscript
-func _ready():
-	P2PNetwork.network_access.register_method(Callable)
-	P2PNetwork.rpc_method(Callable)
-```
-
+Remote peers cannot select a NodePath, method, signal, property, or scene. A
+game registers every accepted message and its limits locally:
 
 ```gdscript
-func _ready():
-	P2PNetwork.network_access.register_method(send_message)
-	P2PNetwork.rpc_method(send_message.bind("Hello!"))
+func _ready() -> void:
+	P2PNetwork.register_message(
+		"game.chat",
+		_on_chat,
+		512, # payload bytes
+		true, # accepted from clients by the authority
+		false, # not accepted from the authority by clients
+		1,
+		RedotP2PTransportAdapter.Delivery.RELIABLE,
+		2.0, # messages per second per peer
+		4, # burst
+		"chat.send"
+	)
 
-func send_message(msg:String):
-	print(msg)
+
+func _on_chat(peer_id: int, payload: PackedByteArray) -> void:
+	# Decode and validate the game's own bounded payload here.
+	pass
 ```
 
+The authority assigns roles or scoped capabilities through
+`P2PNetwork.access_control`. Client input still needs game-specific semantic
+validation; this addon supplies the trust boundary, not game rules.
 
-## RPC Sync
+## Secure defaults
 
-```gdscript
-extends Node
+- Incoming message types are deny-by-default.
+- Raw Variant/object deserialization is not used on network frames.
+- Client messages cannot invoke arbitrary methods, signals, properties, or
+  scene creation.
+- The listen host or dedicated server is authoritative.
+- Frames, payloads, channels, packets per tick, bytes per tick, chat, lobby
+  state, entity state, and intent rates are bounded.
+- Replayed or reordered sequence numbers are rejected per peer/channel.
+- Plain WebSocket is rejected except for explicitly enabled loopback
+  development.
+- Moderation enforcement and CIDR banning are optional and off by default.
+- Address bans use only the authority-observed transport address. Relay-hidden
+  transports return no address rather than trusting a client claim.
+- Exact address bans are the normal mode. CIDR requires explicit enablement;
+  ranges broader than IPv4 `/24` or IPv6 `/64` require high-risk confirmation,
+  and `/16` or `/48` are absolute limits.
 
-@export var sync_priority:P2PNetwork.SYNC_PRIORITY = P2PNetwork.SYNC_PRIORITY.LOW
-var network_id:int
-var _recieved:bool
+JSON-backed compatibility state accepts only bounded JSON-safe values. Store
+network IDs and revision-like integers as canonical decimal strings when exact
+integer fidelity matters, because JSON numbers are decoded as floating-point
+values by the engine.
 
-func _ready():
-	NetworkNodeHelper.set_object_name(self)
-	P2PLobby.player_left_lobby.connect(player_left)
-	P2PLobby.player_joined_lobby.connect(player_joined)
-	P2PNetwork.globalData.player_data_updated.connect(_player_data_updated)
-	P2PNetwork.disconnect.connect(destroy)
-	P2PNetwork.periodic_sync.connect(_periodic_sync_timeout)
+## Upstream compatibility
 
-func _recived_obj(network_id,path):
-	if _recieved:
-		return
-	if path == get_path():
-		_recieved = true
+The familiar classes and facade names remain where they can be made safe.
+Legacy arbitrary `rpc_method`, remote signal emission, arbitrary node removal,
+and free-form node synchronization are rejected while online with the stable
+status `UNSAFE_LEGACY_API_REJECTED`. Use registered messages, `P2PNode`, or the
+replication services instead. Wire compatibility with the upstream addon is not
+provided.
+
+## Development and tests
+
+Set `REDOT_BIN` to the Redot 26.2 console executable, then run:
+
+```powershell
+./tools/run_tests.ps1 -RedotBin $env:REDOT_BIN
 ```
 
+Build a reviewable addon archive without publishing it:
 
-## RPC Queue Free
-Deletes the provided object for all connected clients. You will have to be a server or object owner to call.
-
-```gdcsript
-	P2PNetwork.rpc_remove_node(self)
+```powershell
+./tools/package_addon.ps1
 ```
 
-### Global Data
+Generated test artifacts and packages are ignored by Git. See
+[CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
-```gdcript
-P2PNetwork.globalData.set_game_data("key",value)
-```
+## Fork provenance
 
-Example
-```gdcript
-P2PNetwork.globalData.set_game_data("map_seed",map_seed)
-var map_seed = P2PNetwork.globalData.get_game_data("map_seed")
-```
+- Upstream: `DawnGroveStudios/GodotP2PNetwork`
+- Upstream baseline: `54256e434c4735f38bbfbaae7d01fb6a47bc0c8b`
+- Intended downstream: `dominicbytes/RedotP2PNetwork`
+- License: MIT; see [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md)
+
+The repository retains upstream Git ancestry. The addon path and protocol were
+changed intentionally for Redot and for safer defaults.

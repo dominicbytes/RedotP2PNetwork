@@ -1,8 +1,20 @@
-# Godot 4+ specific ignores
+# Redot editor state
 .godot/
-**.import
-.idea
-exports/
-.vscode
-**.x86_64
-addons/p2p/config.data
+tests/.artifacts/
+
+# Local diagnostics and generated API attempts
+.api/
+logs/
+
+# Builds and packages
+builds/
+dist/
+*.exe
+*.pck
+*.zip
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
