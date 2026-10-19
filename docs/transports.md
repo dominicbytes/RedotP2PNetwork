@@ -6,10 +6,10 @@ player identity or a grant of gameplay authority.
 
 | Transport | Native support | Security posture | Alpha evidence |
 |---|---|---|---|
-| ENet | Desktop native | Exposes the authority-observed remote address. ENet does not provide application authentication or confidentiality here; add an admission/identity layer before exposing an Internet service. | Windows two-process core and compatibility-facade fixtures on Redot 26.2. |
-| WebSocket | Native and web-capable API | Reliable only. Production defaults to WSS/TLS. Plain WS requires explicit loopback development mode and rejects non-loopback hosts. Reverse-proxy trust remains the game's deployment responsibility. | Windows loopback two-process core and facade fixtures. WSS deployment is not yet certified. |
-| Steam | Desktop provider | Dynamically borrows an already initialized, matching RedotSteam client context and never initializes or shuts down global Steam. No address is exposed. Transport identity is not yet a completed authenticated-admission profile. | Compiles and fails closed without a provider. Live private-App-ID and headless game-server fixtures remain open. |
-| WebRTC | Native/web provider surface | Authority-star topology. SDP/ICE and negotiation generations are bounded. No public STUN/TURN service is bundled and ICE candidates never become IP-ban evidence. | Compiles and fails closed until signaling, ICE, and an available peer factory/backend are supplied. No real backend fixture is currently certified. |
+| ENet | Desktop native | Exposes the authority-observed remote address. ENet does not provide application authentication or confidentiality here; add an admission/identity layer before exposing an Internet service. | Windows two-process core and compatibility-facade fixtures on Redot 26.2 LTS and 26.3-stable. |
+| WebSocket | Native and web-capable API | Reliable only. Production defaults to WSS/TLS. Plain WS requires explicit loopback development mode and rejects non-loopback hosts. Reverse-proxy trust remains the game's deployment responsibility. | Windows loopback two-process core and facade fixtures on Redot 26.2 LTS and 26.3-stable. WSS deployment is not yet certified. |
+| Steam | Desktop provider | Dynamically borrows an already initialized, matching RedotSteam client context and never initializes or shuts down global Steam. No address is exposed. Transport identity is not yet a completed authenticated-admission profile. | Compiles on both supported engines and fails closed without a provider; the optional RedotSteam binary is not yet qualified on 26.3. Live private-App-ID and headless game-server fixtures remain open. |
+| WebRTC | Native/web provider surface | Authority-star topology. SDP/ICE and negotiation generations are bounded. No public STUN/TURN service is bundled and ICE candidates never become IP-ban evidence. | Compiles on both supported engines and fails closed until signaling, ICE, and an available peer factory/backend are supplied. No real backend fixture is currently certified. |
 
 ## Adapter contract
 
@@ -52,3 +52,6 @@ Games must provide:
 
 Signaling and TURN are infrastructure, not gameplay authorities. A production
 Internet profile needs a qualified TURN path and short-lived credentials.
+
+See [engine compatibility](compatibility/redot-versions.md) for the validation
+scope and temporary 26.3 editor-import tolerance.

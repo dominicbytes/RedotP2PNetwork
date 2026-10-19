@@ -7,6 +7,8 @@ versioning after its public alpha begins.
 
 ### Added
 
+- Redot 26.3-stable support alongside 26.2 LTS, with a pinned Windows CI matrix.
+
 - Secure, bounded, versioned message envelope and transport-neutral service.
 - ENet and WebSocket adapters with two-process conformance fixtures.
 - Provider-gated Steam and WebRTC adapter surfaces.
@@ -18,7 +20,15 @@ versioning after its public alpha begins.
 - Quickstart project, test runner, package script, migration guide, security
   documentation, and fork provenance.
 
+### Fixed
+
+- WebSocket disconnect broadcasts no longer send through closing sockets.
+
 ### Changed
+
+- Test harnesses reject unexpected engine diagnostics and missing completion
+  markers, require usable exit codes, and bound engine processes.
+- Isolated test suites cover receive metadata rejection and ENet work budgets.
 
 - Replaced the upstream trust and synchronization model rather than preserving
   wire compatibility.
