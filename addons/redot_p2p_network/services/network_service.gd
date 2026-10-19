@@ -13,6 +13,7 @@ var _transport: RedotP2PTransportAdapter = null
 var _definitions: Dictionary = {}
 var _inbound_buckets: Dictionary = {}
 var _last_sequences: Dictionary = {}
+var _replay_windows: Dictionary = {}
 var _outbound_sequences: Dictionary = {}
 var _violations: Dictionary = {}
 var _quarantined_peers: Dictionary = {}
@@ -139,7 +140,7 @@ func send_message(
 	var target_peer: int = peer_id
 	if not _transport.is_authority() and target_peer == 0:
 		target_peer = 1
-	var next_sequence: int = _next_outbound_sequence(channel)
+	var next_sequence: int = _next_outbound_sequence(channel, delivery)
 	if next_sequence <= 0:
 		service_error.emit(RedotP2PStatusCodes.INTERNAL_INVARIANT_FAILED)
 		return ERR_OUT_OF_MEMORY
@@ -215,11 +216,12 @@ func _on_packet_received(peer_id: int, packet: PackedByteArray, channel: int, de
 	if not definition.required_capability.is_empty() and not _has_capability(peer_id, definition.required_capability):
 		_reject(peer_id, RedotP2PStatusCodes.MESSAGE_UNAUTHORIZED)
 		return
-	if not _accept_sequence(peer_id, envelope.channel, envelope.sequence):
-		_reject(peer_id, RedotP2PStatusCodes.MESSAGE_REPLAYED)
+	if not _accept_sequence(peer_id, envelope.channel, envelope.delivery, envelope.sequence):
+		if envelope.delivery == RedotP2PTransportAdapter.Delivery.RELIABLE:
+			_reject(peer_id, RedotP2PStatusCodes.MESSAGE_REPLAYED)
 		return
 	if not _consume_rate_budget(peer_id, definition):
-		_reject(peer_id, RedotP2PStatusCodes.MESSAGE_RATE_LIMITED)
+		message_rejected.emit(peer_id, RedotP2PStatusCodes.MESSAGE_RATE_LIMITED)
 		return
 	definition.handler.call(peer_id, envelope.payload)
 	message_received.emit(peer_id, envelope.message_type, envelope.payload)
@@ -240,12 +242,28 @@ func _has_capability(peer_id: int, capability: String) -> bool:
 	return allowed_value is bool and bool(allowed_value)
 
 
-func _accept_sequence(peer_id: int, channel: int, sequence: int) -> bool:
-	var key: String = "%d:%d" % [peer_id, channel]
+func _accept_sequence(peer_id: int, channel: int, delivery: int, sequence: int) -> bool:
+	var key: String = "%d:%d:%d" % [peer_id, channel, delivery]
 	var previous: int = int(_last_sequences.get(key, 0))
-	if sequence <= previous:
+	if delivery != RedotP2PTransportAdapter.Delivery.UNRELIABLE:
+		if sequence <= previous:
+			return false
+		_last_sequences[key] = sequence
+		return true
+	var bitmap: int = int(_replay_windows.get(key, 0))
+	if sequence > previous:
+		var advance: int = sequence - previous
+		bitmap = 1 if advance >= 64 else (bitmap << advance) | 1
+		_last_sequences[key] = sequence
+		_replay_windows[key] = bitmap
+		return true
+	var distance: int = previous - sequence
+	if distance >= 64:
 		return false
-	_last_sequences[key] = sequence
+	var bit: int = 1 << distance
+	if (bitmap & bit) != 0:
+		return false
+	_replay_windows[key] = bitmap | bit
 	return true
 
 
@@ -263,12 +281,13 @@ func _consume_rate_budget(peer_id: int, definition: RedotP2PMessageDefinition) -
 	return bucket.allow()
 
 
-func _next_outbound_sequence(channel: int) -> int:
-	var previous: int = int(_outbound_sequences.get(channel, 0))
+func _next_outbound_sequence(channel: int, delivery: int) -> int:
+	var key: String = "%d:%d" % [channel, delivery]
+	var previous: int = int(_outbound_sequences.get(key, 0))
 	if previous >= 4_294_967_295:
 		return -1
 	var next_sequence: int = previous + 1
-	_outbound_sequences[channel] = next_sequence
+	_outbound_sequences[key] = next_sequence
 	return next_sequence
 
 
@@ -331,6 +350,7 @@ func _remove_peer_state(peer_id: int) -> void:
 		var key: String = str(key_value)
 		if key.begins_with(sequence_prefix):
 			_last_sequences.erase(key_value)
+			_replay_windows.erase(key_value)
 	var bucket_prefix: String = "%d:" % peer_id
 	for key_value: Variant in _inbound_buckets.keys():
 		var key: String = str(key_value)
@@ -341,6 +361,7 @@ func _remove_peer_state(peer_id: int) -> void:
 func _reset_session_state() -> void:
 	_inbound_buckets.clear()
 	_last_sequences.clear()
+	_replay_windows.clear()
 	_outbound_sequences.clear()
 	_violations.clear()
 	_quarantined_peers.clear()
