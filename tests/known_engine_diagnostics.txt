@@ -1,0 +1,3 @@
+# No engine diagnostics are currently allowed.
+# Each future regex entry must follow a comment explaining why it is benign.
+# An optional [26.3] prefix limits an entry to that engine version.

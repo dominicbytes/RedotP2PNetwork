@@ -5,11 +5,15 @@ param(
     [string]$Transport,
     [ValidateSet('core', 'facade')]
     [string]$Scenario = 'core',
-    [int]$Port = 32777
+    [int]$Port = 32777,
+    [string]$ExtraAllowedDiagnosticsFile = '',
+    [ValidateRange(1, 600)]
+    [int]$TimeoutSeconds = 15
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'test_process.ps1')
 
 $projectPath = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $artifactPath = Join-Path $projectPath "tests\.artifacts\$Transport-$Scenario-fixture"
@@ -24,14 +28,17 @@ Set-Content -LiteralPath $hostErr -Value ''
 Set-Content -LiteralPath $clientOut -Value ''
 Set-Content -LiteralPath $clientErr -Value ''
 
-$quotedProjectPath = '"' + $projectPath + '"'
+$engineVersion = Get-TestEngineVersion -RedotBin $RedotBin -ProjectPath $projectPath -ArtifactPath $artifactPath
+$allowedDiagnostics = @(Get-AllowedEngineDiagnostics -Files @(
+    (Join-Path $projectPath 'tests/known_engine_diagnostics.txt'), $ExtraAllowedDiagnosticsFile
+) -EngineVersion $engineVersion)
 $fixtureScript = 'tests/integration/enet_endpoint.gd'
 if ($Scenario -eq 'facade') {
     $fixtureScript = 'tests/integration/facade_endpoint.gd'
 }
 $commonArguments = @(
-    '--headless',
-    '--path', $quotedProjectPath,
+    '--headless', '--audio-driver', 'Dummy', '--quit-after', '20000',
+    '--path', $projectPath,
     '--script', $fixtureScript,
     '--'
 )
@@ -42,11 +49,11 @@ $hostProcess = $null
 $clientProcess = $null
 
 try {
-    $hostProcess = Start-Process -FilePath $RedotBin -ArgumentList $hostArguments -WorkingDirectory $projectPath -WindowStyle Hidden -RedirectStandardOutput $hostOut -RedirectStandardError $hostErr -PassThru
+    $hostProcess = Start-TestProcess -RedotBin $RedotBin -Arguments $hostArguments -ProjectPath $projectPath -Stdout $hostOut -Stderr $hostErr
     Start-Sleep -Milliseconds 500
-    $clientProcess = Start-Process -FilePath $RedotBin -ArgumentList $clientArguments -WorkingDirectory $projectPath -WindowStyle Hidden -RedirectStandardOutput $clientOut -RedirectStandardError $clientErr -PassThru
+    $clientProcess = Start-TestProcess -RedotBin $RedotBin -Arguments $clientArguments -ProjectPath $projectPath -Stdout $clientOut -Stderr $clientErr
 
-    $deadline = [DateTime]::UtcNow.AddSeconds(15)
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ((-not $hostProcess.HasExited -or -not $clientProcess.HasExited) -and [DateTime]::UtcNow -lt $deadline) {
         Start-Sleep -Milliseconds 100
         $hostProcess.Refresh()
@@ -57,34 +64,33 @@ try {
         throw "$Transport fixture timed out."
     }
 
-    $hostProcess.WaitForExit()
-    $clientProcess.WaitForExit()
+    Wait-TestProcess -Process $hostProcess -TimeoutSeconds 1 -Label 'Fixture host'
+    Wait-TestProcess -Process $clientProcess -TimeoutSeconds 1 -Label 'Fixture client'
+    Assert-EngineDiagnostics -Logs @($hostOut, $hostErr, $clientOut, $clientErr) -AllowedDiagnostics $allowedDiagnostics -Label "$Transport $Scenario fixture"
     $hostText = Get-Content -LiteralPath $hostOut -Raw
     $clientText = Get-Content -LiteralPath $clientOut -Raw
-    $hostErrorText = Get-Content -LiteralPath $hostErr -Raw
-    $clientErrorText = Get-Content -LiteralPath $clientErr -Raw
 
     $hostExitCode = $hostProcess.ExitCode
     $clientExitCode = $clientProcess.ExitCode
-    $hostFailed = $null -ne $hostExitCode -and $hostExitCode -ne 0
-    $clientFailed = $null -ne $clientExitCode -and $clientExitCode -ne 0
+    $hostFailed = $null -eq $hostExitCode -or $hostExitCode -ne 0
+    $clientFailed = $null -eq $clientExitCode -or $clientExitCode -ne 0
     if ($hostFailed -or $clientFailed) {
-        throw "$Transport fixture process failed (host exit $hostExitCode, client exit $clientExitCode).`nHOST:`n$hostText$hostErrorText`nCLIENT:`n$clientText$clientErrorText"
+        throw "$Transport fixture process failed (host exit $hostExitCode, client exit $clientExitCode). Inspect the fixture logs."
     }
     $marker = $Transport.ToUpperInvariant()
     if ($Scenario -eq 'facade') {
         $marker = "${marker}_FACADE"
     }
-    if ($hostText -notmatch "${marker}_HOST_PASS" -or $clientText -notmatch "${marker}_CLIENT_PASS") {
-        throw "$Transport fixture did not report both pass markers.`nHOST:`n$hostText$hostErrorText`nCLIENT:`n$clientText$clientErrorText"
+    if ($hostText -notmatch "(?m)^${marker}_HOST_PASS\r?$" -or $clientText -notmatch "(?m)^${marker}_CLIENT_PASS\r?$") {
+        throw "$Transport fixture did not report both pass markers. Inspect the fixture logs."
     }
     Write-Output "${marker}_TWO_PROCESS_FIXTURE_PASS"
 }
 finally {
     if ($null -ne $clientProcess -and -not $clientProcess.HasExited) {
-        Stop-Process -Id $clientProcess.Id -Force
+        Stop-TestProcessTree -Process $clientProcess
     }
     if ($null -ne $hostProcess -and -not $hostProcess.HasExited) {
-        Stop-Process -Id $hostProcess.Id -Force
+        Stop-TestProcessTree -Process $hostProcess
     }
 }
