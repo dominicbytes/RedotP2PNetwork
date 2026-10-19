@@ -91,11 +91,18 @@ validation; this addon supplies the trust boundary, not game rules.
 - Plain WebSocket is rejected except for explicitly enabled loopback
   development.
 - Moderation enforcement and CIDR banning are optional and off by default.
+  Attach moderation before peers connect. Enabling enforcement or adding a ban
+  immediately rechecks tracked peers; repeated attachment also rechecks them.
 - Address bans use only the authority-observed transport address. Relay-hidden
   transports return no address rather than trusting a client claim.
 - Exact address bans are the normal mode. CIDR requires explicit enablement;
   ranges broader than IPv4 `/24` or IPv6 `/64` require high-risk confirmation,
-  and `/16` or `/48` are absolute limits.
+  and `/16` or `/48` are absolute limits. Configuration can tighten the normal
+  thresholds but cannot lower them below `/24` or `/64`.
+- IPv4-mapped IPv6 addresses normalize to IPv4 for exact and range bans.
+  Mapped CIDR prefixes `/96` through `/128` translate to IPv4 `/0` through `/32`
+  and then follow IPv4 confirmation and absolute limits (so prefixes below
+  mapped `/112` are rejected). Broader mapped prefixes are rejected.
 
 JSON-backed compatibility state accepts only bounded JSON-safe values. Store
 network IDs and revision-like integers as canonical decimal strings when exact

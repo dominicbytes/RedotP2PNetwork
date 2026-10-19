@@ -12,6 +12,8 @@ static func normalize(address: String) -> String:
 		var groups: Array[int] = _parse_ipv6_groups(value)
 		if groups.size() != 8:
 			return ""
+		if groups[0] == 0 and groups[1] == 0 and groups[2] == 0 and groups[3] == 0 and groups[4] == 0 and groups[5] == 0xFFFF:
+			return "%d.%d.%d.%d" % [groups[6] >> 8, groups[6] & 0xFF, groups[7] >> 8, groups[7] & 0xFF]
 		var parts: PackedStringArray = PackedStringArray()
 		for group: int in groups:
 			parts.append("%04x" % group)

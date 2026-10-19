@@ -21,6 +21,7 @@ var _ipv6_min_prefix: int = DEFAULT_IPV6_MIN_PREFIX
 var _exact_address_bans: Dictionary = {}
 var _identity_bans: Dictionary = {}
 var _cidr_bans: Array[RedotP2PBanRecord] = []
+var _connected_peers: Dictionary = {}
 
 
 func attach(network: RedotP2PNetworkService) -> Error:
@@ -31,6 +32,11 @@ func attach(network: RedotP2PNetworkService) -> Error:
 	_network = network
 	if not _network.peer_connected.is_connected(_on_peer_connected):
 		_network.peer_connected.connect(_on_peer_connected)
+	if not _network.peer_disconnected.is_connected(_on_peer_disconnected):
+		_network.peer_disconnected.connect(_on_peer_disconnected)
+	if not _network.transport_state_changed.is_connected(_on_transport_state_changed):
+		_network.transport_state_changed.connect(_on_transport_state_changed)
+	_reevaluate_peers()
 	return OK
 
 
@@ -39,6 +45,8 @@ func set_enforcement_enabled(enabled: bool) -> void:
 		return
 	_enforcement_enabled = enabled
 	enforcement_changed.emit(enabled)
+	if enabled:
+		_reevaluate_peers()
 
 
 func is_enforcement_enabled() -> bool:
@@ -51,8 +59,8 @@ func configure_cidr(enabled: bool, ipv4_min_prefix: int = 24, ipv6_min_prefix: i
 	if ipv6_min_prefix < ABSOLUTE_IPV6_MIN_PREFIX or ipv6_min_prefix > 128:
 		return ERR_INVALID_PARAMETER
 	_cidr_enabled = enabled
-	_ipv4_min_prefix = ipv4_min_prefix
-	_ipv6_min_prefix = ipv6_min_prefix
+	_ipv4_min_prefix = maxi(ipv4_min_prefix, DEFAULT_IPV4_MIN_PREFIX)
+	_ipv6_min_prefix = maxi(ipv6_min_prefix, DEFAULT_IPV6_MIN_PREFIX)
 	return OK
 
 
@@ -69,6 +77,7 @@ func ban_exact_address(address: String, reason: String, expires_unix: int = 0) -
 	record.expires_unix = expires_unix
 	_exact_address_bans[normalized] = record
 	ban_added.emit(record.kind, record.target, record.expires_unix)
+	_reevaluate_peers()
 	return OK
 
 
@@ -83,6 +92,7 @@ func ban_identity(identity: String, reason: String, expires_unix: int = 0) -> Er
 	record.expires_unix = expires_unix
 	_identity_bans[normalized] = record
 	ban_added.emit(record.kind, record.target, record.expires_unix)
+	_reevaluate_peers()
 	return OK
 
 
@@ -96,6 +106,10 @@ func ban_cidr(cidr: String, reason: String, expires_unix: int, high_risk_confirm
 	if normalized_address.is_empty() or not _is_decimal(parts[1]):
 		return ERR_INVALID_PARAMETER
 	var prefix: int = int(parts[1])
+	if parts[0].contains(":") and not normalized_address.contains(":"):
+		if prefix < 96 or prefix > 128:
+			return ERR_INVALID_PARAMETER
+		prefix -= 96
 	var is_ipv6: bool = normalized_address.contains(":")
 	var normal_minimum: int = _ipv6_min_prefix if is_ipv6 else _ipv4_min_prefix
 	var absolute_minimum: int = ABSOLUTE_IPV6_MIN_PREFIX if is_ipv6 else ABSOLUTE_IPV4_MIN_PREFIX
@@ -116,6 +130,7 @@ func ban_cidr(cidr: String, reason: String, expires_unix: int, high_risk_confirm
 	record.expires_unix = expires_unix
 	_cidr_bans.append(record)
 	ban_added.emit(record.kind, record.target, record.expires_unix)
+	_reevaluate_peers()
 	return OK
 
 
@@ -157,6 +172,27 @@ func check_identity(identity: String, now_unix: int = -1) -> String:
 
 
 func _on_peer_connected(peer_id: int) -> void:
+	_connected_peers[peer_id] = true
+	_check_peer(peer_id)
+
+
+func _on_peer_disconnected(peer_id: int, _reason_code: String) -> void:
+	_connected_peers.erase(peer_id)
+
+
+func _on_transport_state_changed(_previous_state: int, current_state: int, _reason_code: String) -> void:
+	if current_state in [RedotP2PTransportAdapter.State.STOPPED, RedotP2PTransportAdapter.State.FAILED]:
+		_connected_peers.clear()
+
+
+func _reevaluate_peers() -> void:
+	for peer_id: int in _connected_peers.keys():
+		_check_peer(peer_id)
+
+
+func _check_peer(peer_id: int) -> void:
+	if not _connected_peers.has(peer_id):
+		return
 	if not _enforcement_enabled or _network == null or not _network.is_authority():
 		return
 	var identity: String = _network.get_peer_identity(peer_id)
@@ -169,6 +205,7 @@ func _on_peer_connected(peer_id: int) -> void:
 
 
 func _deny(peer_id: int) -> void:
+	_connected_peers.erase(peer_id)
 	peer_denied.emit(peer_id, RedotP2PStatusCodes.PEER_BANNED)
 	_network.disconnect_peer(peer_id, RedotP2PStatusCodes.PEER_BANNED)
 
