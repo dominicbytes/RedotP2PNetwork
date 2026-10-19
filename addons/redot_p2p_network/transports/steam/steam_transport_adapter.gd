@@ -21,6 +21,16 @@ func _ready() -> void:
 	set_process(_state != State.STOPPED)
 
 
+func _exit_tree() -> void:
+	if _state != State.STOPPED:
+		_stop_now(RedotP2PStatusCodes.CONNECTION_CLOSED)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and _state != State.STOPPED:
+		_stop_now(RedotP2PStatusCodes.CONNECTION_CLOSED)
+
+
 func set_provider(provider: STEAM_PROVIDER_SCRIPT) -> Error:
 	if _state != State.STOPPED:
 		return ERR_ALREADY_IN_USE
@@ -97,7 +107,7 @@ func send_packet(peer_id: int, packet: PackedByteArray, channel: int, delivery: 
 		return ERR_UNCONFIGURED
 	if peer_id < 0 or packet.is_empty() or packet.size() > _limits.max_frame_bytes:
 		return ERR_INVALID_PARAMETER
-	if channel < 0 or channel >= _limits.max_channels:
+	if channel < 0 or channel >= _limits.max_channels or channel >= _provider.get_max_channels():
 		return ERR_INVALID_PARAMETER
 	var native_delivery: int = _to_native_delivery(delivery)
 	if native_delivery < 0:

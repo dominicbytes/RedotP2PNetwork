@@ -41,6 +41,26 @@ The current provider is a client/listen-host integration surface. Pure
 headless Steam GameServer support remains unavailable until RedotSteam exposes
 and qualifies the separate game-server lifecycle and authentication API.
 
+### Steam lifecycle and lanes
+
+Stopping, removing the adapter from the scene tree, or freeing it releases
+its callback-pump lease. Cleanup is synchronous on tree exit and destruction,
+including during a transport callback. It closes the transport peer
+without shutting down the global Steam context.
+
+Steam lanes are configured by `steam/multiplayer_peer/max_channels` (default
+4). The provider's `get_max_channels()` reads this setting, including feature
+overrides, without requiring a live Steam client. The adapter accepts channels
+below both that lane count and the protocol's `max_channels` limit. Sending on
+a negative or out-of-range channel returns `ERR_INVALID_PARAMETER` before
+calling the native peer; an invalid nonpositive lane count allows no sends.
+The default supports channels 0 through 3 used by the built-in services.
+Configure lanes before starting a Steam session.
+
+The capability model reports channel support as a boolean and has no numeric
+channel-count field. Live Steam lane delivery, callback pumping, and client
+reinitialization still require a matching RedotSteam context and Steam client.
+
 ## WebRTC providers
 
 Games must provide:
