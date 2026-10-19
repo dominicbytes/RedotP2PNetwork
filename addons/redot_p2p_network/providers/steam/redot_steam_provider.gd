@@ -7,6 +7,8 @@ enum CallbackPumpMode {
 }
 
 const MAX_CALLBACK_GAP_MSEC: int = 1000
+const MAX_CHANNELS_SETTING: StringName = &"steam/multiplayer_peer/max_channels"
+const DEFAULT_MAX_CHANNELS: int = 4
 
 static var _adapter_pump_owner_id: int = 0
 
@@ -98,6 +100,12 @@ func get_local_steam_id() -> int:
 
 func get_expected_app_id() -> int:
 	return _expected_app_id
+
+
+func get_max_channels() -> int:
+	if not ProjectSettings.has_setting(MAX_CHANNELS_SETTING):
+		return DEFAULT_MAX_CHANNELS
+	return maxi(0, int(ProjectSettings.get_setting_with_override(MAX_CHANNELS_SETTING)))
 
 
 func get_callback_pump_mode() -> int:
