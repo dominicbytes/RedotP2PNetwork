@@ -4,6 +4,7 @@ extends RedotP2PTransportAdapter
 var _peer: ENetMultiplayerPeer = null
 var _authority: bool = false
 var _signals_connected: bool = false
+var _connected_peers: Dictionary = {}
 var _disconnect_reasons: Dictionary = {}
 var _inside_transport_process: bool = false
 var _stop_pending: bool = false
@@ -102,8 +103,11 @@ func disconnect_peer(peer_id: int, reason_code: String = RedotP2PStatusCodes.CON
 		return ERR_INVALID_PARAMETER
 	if not _authority and peer_id != 1:
 		return ERR_UNAUTHORIZED
+	if not _connected_peers.has(peer_id):
+		return ERR_DOES_NOT_EXIST
 	_disconnect_reasons[peer_id] = reason_code
 	_peer.disconnect_peer(peer_id, true)
+	_on_peer_disconnected(peer_id)
 	return OK
 
 
@@ -149,6 +153,7 @@ func _stop_now(reason_code: String) -> void:
 	set_process(false)
 	_authority = false
 	_signals_connected = false
+	_connected_peers.clear()
 	_disconnect_reasons.clear()
 	_stop_pending = false
 	_pending_stop_reason = RedotP2PStatusCodes.CONNECTION_CLOSED
@@ -212,14 +217,17 @@ func _connect_peer_signals() -> void:
 
 
 func _on_peer_connected(peer_id: int) -> void:
+	_connected_peers[peer_id] = true
 	peer_connected.emit(peer_id)
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
+	if not _connected_peers.erase(peer_id):
+		return
 	var reason_code: String = str(_disconnect_reasons.get(peer_id, RedotP2PStatusCodes.CONNECTION_CLOSED))
-	_disconnect_reasons.erase(peer_id)
-	if not _authority and peer_id == 1:
+	if not _authority and peer_id == 1 and not _disconnect_reasons.has(peer_id):
 		reason_code = RedotP2PStatusCodes.AUTHORITY_LOST
+	_disconnect_reasons.erase(peer_id)
 	peer_disconnected.emit(peer_id, reason_code)
 	if not _authority and peer_id == 1:
 		stop(reason_code)
@@ -236,7 +244,7 @@ func _update_client_connection_state() -> void:
 			_set_state(State.FAILED, RedotP2PStatusCodes.CONNECTION_FAILED)
 			transport_error.emit(RedotP2PStatusCodes.CONNECTION_FAILED)
 	elif _state == State.CONNECTED and connection_status == MultiplayerPeer.CONNECTION_DISCONNECTED:
-		peer_disconnected.emit(1, RedotP2PStatusCodes.AUTHORITY_LOST)
+		_on_peer_disconnected(1)
 		stop(RedotP2PStatusCodes.AUTHORITY_LOST)
 
 

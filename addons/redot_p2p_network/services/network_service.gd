@@ -15,6 +15,7 @@ var _inbound_buckets: Dictionary = {}
 var _last_sequences: Dictionary = {}
 var _outbound_sequences: Dictionary = {}
 var _violations: Dictionary = {}
+var _quarantined_peers: Dictionary = {}
 var _capability_checker: Callable = Callable()
 
 
@@ -68,6 +69,8 @@ func get_transport_capabilities() -> RedotP2PTransportCapabilities:
 func host(bind_address: String, port: int, max_peers: int) -> Error:
 	if _transport == null:
 		return ERR_UNCONFIGURED
+	if _transport.get_state() != RedotP2PTransportAdapter.State.STOPPED:
+		return ERR_ALREADY_IN_USE
 	_reset_session_state()
 	return _transport.host(bind_address, port, max_peers)
 
@@ -75,6 +78,8 @@ func host(bind_address: String, port: int, max_peers: int) -> Error:
 func join(address: String, port: int) -> Error:
 	if _transport == null:
 		return ERR_UNCONFIGURED
+	if _transport.get_state() != RedotP2PTransportAdapter.State.STOPPED:
+		return ERR_ALREADY_IN_USE
 	_reset_session_state()
 	return _transport.join(address, port)
 
@@ -177,6 +182,8 @@ func get_local_peer_id() -> int:
 
 
 func _on_packet_received(peer_id: int, packet: PackedByteArray, channel: int, delivery: int) -> void:
+	if _quarantined_peers.has(peer_id):
+		return
 	var decoded: RedotP2PEnvelopeDecodeResult = RedotP2PMessageEnvelope.decode(packet, _limits)
 	if not decoded.is_ok():
 		_reject(peer_id, decoded.status_code)
@@ -270,10 +277,12 @@ func _reject(peer_id: int, reason_code: String) -> void:
 	var count: int = int(_violations.get(peer_id, 0)) + 1
 	_violations[peer_id] = count
 	if count >= _limits.max_protocol_violations and _transport != null:
+		_quarantined_peers[peer_id] = true
 		_transport.disconnect_peer(peer_id, reason_code)
 
 
 func _on_peer_connected(peer_id: int) -> void:
+	_quarantined_peers.erase(peer_id)
 	peer_connected.emit(peer_id)
 
 
@@ -334,3 +343,4 @@ func _reset_session_state() -> void:
 	_last_sequences.clear()
 	_outbound_sequences.clear()
 	_violations.clear()
+	_quarantined_peers.clear()
