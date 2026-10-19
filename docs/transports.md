@@ -73,5 +73,26 @@ Games must provide:
 Signaling and TURN are infrastructure, not gameplay authorities. A production
 Internet profile needs a qualified TURN path and short-lived credentials.
 
+### WebRTC channel mapping
+
+Each logical channel has separate reliable, ordered-unreliable, and unordered
+unreliable native data channels. Logical channel 0 uses the engine's three
+default channels; each additional logical channel configures three extra
+channels through `create_server(channels_config)` or
+`create_client(peer_id, channels_config)`. Both endpoints must use the same
+`max_channels` limit.
+
+A configured native channel has one fixed delivery mode: changing the native
+transfer mode does not change that channel's reliability or ordering. The
+adapter therefore maps each logical channel/delivery pair to its own native
+channel and maps native receive metadata back to the logical channel. This
+keeps independent ordering between logical channels and preserves the message
+service's envelope channel/delivery cross-check. It avoids trusting envelope
+metadata to choose the observed delivery mode.
+
+Stopping disconnects the adapter's handlers from the externally owned
+signaling provider before closing the session. Restarting may reuse that
+provider or replace it without retaining callbacks from the previous session.
+
 See [engine compatibility](compatibility/redot-versions.md) for the validation
 scope and temporary 26.3 editor-import tolerance.

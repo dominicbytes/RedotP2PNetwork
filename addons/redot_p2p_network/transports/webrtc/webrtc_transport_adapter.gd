@@ -5,6 +5,11 @@ const MAX_SDP_BYTES: int = 65_536
 const MAX_ICE_CANDIDATE_BYTES: int = 4096
 const MAX_ICE_MEDIA_BYTES: int = 128
 const MAX_CONFIGURED_PEERS: int = 4095
+const CHANNEL_DELIVERIES: Array[int] = [
+	MultiplayerPeer.TRANSFER_MODE_UNRELIABLE,
+	MultiplayerPeer.TRANSFER_MODE_UNRELIABLE_ORDERED,
+	MultiplayerPeer.TRANSFER_MODE_RELIABLE,
+]
 
 var _signaling: RedotP2PWebRTCSignalingProvider = null
 var _ice_provider: RedotP2PIceServerProvider = null
@@ -75,7 +80,7 @@ func host(endpoint: String, port: int, max_peers: int) -> Error:
 	set_process(true)
 	_set_state(State.STARTING, RedotP2PStatusCodes.OK)
 	_peer = WebRTCMultiplayerPeer.new()
-	var create_error: Error = _peer.create_server()
+	var create_error: Error = _peer.create_server(_native_channels_config())
 	if create_error != OK:
 		_peer = null
 		return _fail_start(create_error, RedotP2PStatusCodes.TRANSPORT_FAILURE)
@@ -106,7 +111,7 @@ func join(endpoint: String, port: int) -> Error:
 		_signaling.stop()
 		return _fail_start(ERR_CANT_CONNECT, RedotP2PStatusCodes.CONNECTION_FAILED)
 	_peer = WebRTCMultiplayerPeer.new()
-	var create_error: Error = _peer.create_client(local_peer_id)
+	var create_error: Error = _peer.create_client(local_peer_id, _native_channels_config())
 	if create_error != OK:
 		_peer = null
 		_signaling.stop()
@@ -128,7 +133,8 @@ func send_packet(peer_id: int, packet: PackedByteArray, channel: int, delivery: 
 	if native_delivery < 0:
 		return ERR_INVALID_PARAMETER
 	_peer.set_target_peer(peer_id)
-	_peer.set_transfer_channel(channel)
+	var native_channel: int = 0 if channel == 0 else 1 + (channel - 1) * CHANNEL_DELIVERIES.size() + CHANNEL_DELIVERIES.find(native_delivery)
+	_peer.set_transfer_channel(native_channel)
 	_peer.set_transfer_mode(native_delivery as MultiplayerPeer.TransferMode)
 	return _peer.put_packet(packet)
 
@@ -170,6 +176,7 @@ func stop(reason_code: String = RedotP2PStatusCodes.CONNECTION_CLOSED) -> void:
 
 func _stop_now(reason_code: String) -> void:
 	_set_state(State.STOPPING, reason_code)
+	_disconnect_signals()
 	if _peer != null:
 		_peer.close()
 	if _signaling != null:
@@ -210,7 +217,7 @@ func _process(_delta: float) -> void:
 		if packet_count >= _limits.max_packets_per_tick or byte_count >= _limits.max_bytes_per_tick:
 			break
 		var sender_id: int = _peer.get_packet_peer()
-		var packet_channel: int = _peer.get_packet_channel()
+		var packet_channel: int = _from_native_channel(_peer.get_packet_channel())
 		var packet_delivery: int = _from_native_delivery(_peer.get_packet_mode())
 		var packet: PackedByteArray = _peer.get_packet()
 		packet_count += 1
@@ -243,14 +250,29 @@ func _connect_signals() -> void:
 	_signals_connected = true
 
 
+func _disconnect_signals() -> void:
+	if _signaling == null:
+		return
+	if _signaling.peer_negotiation_requested.is_connected(_on_peer_negotiation_requested):
+		_signaling.peer_negotiation_requested.disconnect(_on_peer_negotiation_requested)
+	if _signaling.session_description_received.is_connected(_on_session_description_received):
+		_signaling.session_description_received.disconnect(_on_session_description_received)
+	if _signaling.ice_candidate_received.is_connected(_on_ice_candidate_received):
+		_signaling.ice_candidate_received.disconnect(_on_ice_candidate_received)
+	if _signaling.peer_left.is_connected(_on_signaling_peer_left):
+		_signaling.peer_left.disconnect(_on_signaling_peer_left)
+	if _signaling.signaling_error.is_connected(_on_signaling_error):
+		_signaling.signaling_error.disconnect(_on_signaling_error)
+
+
 func _on_peer_negotiation_requested(peer_id: int, generation: int, create_offer: bool) -> void:
 	if _peer == null or peer_id <= 0 or peer_id == get_local_peer_id() or generation <= 0:
 		return
-	if _authority and _connections.size() >= _maximum_peers:
-		_signaling.disconnect_peer(peer_id, RedotP2PStatusCodes.CAPACITY_EXCEEDED)
-		return
 	var previous_generation: int = int(_generations.get(peer_id, 0))
 	if generation <= previous_generation:
+		return
+	if _authority and not _connections.has(peer_id) and _connections.size() >= _maximum_peers:
+		_signaling.disconnect_peer(peer_id, RedotP2PStatusCodes.CAPACITY_EXCEEDED)
 		return
 	_reported_disconnections.erase(peer_id)
 	if _connections.has(peer_id):
@@ -434,3 +456,16 @@ func _from_native_delivery(delivery: int) -> int:
 			return Delivery.RELIABLE
 		_:
 			return -1
+
+
+func _native_channels_config() -> Array[int]:
+	var channels: Array[int] = []
+	for logical_channel: int in range(1, _limits.max_channels):
+		channels.append_array(CHANNEL_DELIVERIES)
+	return channels
+
+
+func _from_native_channel(channel: int) -> int:
+	if channel <= 0:
+		return channel
+	return 1 + floori(float(channel - 1) / CHANNEL_DELIVERIES.size())
