@@ -53,6 +53,7 @@ func register_entity(definition: RedotP2PReplicatedEntityDefinition) -> Error:
 
 func unregister_entity(entity_id: String) -> bool:
 	_revisions.erase(entity_id)
+	_remove_entity_intent_buckets(entity_id)
 	return _entities.erase(entity_id)
 
 
@@ -197,6 +198,7 @@ func _apply_despawn(entity_id: String) -> void:
 		definition.despawn_handler.call()
 	_entities.erase(entity_id)
 	_revisions.erase(entity_id)
+	_remove_entity_intent_buckets(entity_id)
 	entity_despawned.emit(entity_id)
 
 
@@ -211,6 +213,14 @@ func _on_peer_disconnected(peer_id: int, _reason_code: String) -> void:
 	var prefix: String = "%d:" % peer_id
 	for key_value: Variant in _intent_buckets.keys():
 		if str(key_value).begins_with(prefix):
+			_intent_buckets.erase(key_value)
+
+
+func _remove_entity_intent_buckets(entity_id: String) -> void:
+	for key_value: Variant in _intent_buckets.keys():
+		var key: String = str(key_value)
+		var separator: int = key.find(":")
+		if separator >= 0 and key.substr(separator + 1) == entity_id:
 			_intent_buckets.erase(key_value)
 
 
