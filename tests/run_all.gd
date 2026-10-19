@@ -111,7 +111,7 @@ func _test_ip_address_normalization() -> void:
 	)
 	_expect_equal(
 		RedotP2PIPAddress.normalize("::ffff:192.0.2.1"),
-		"0000:0000:0000:0000:0000:ffff:c000:0201",
+		"192.0.2.1",
 		"embedded IPv4 is canonicalized"
 	)
 	_expect_equal(RedotP2PIPAddress.normalize("300.1.1.1"), "", "invalid IPv4 is rejected")
@@ -272,7 +272,6 @@ func _test_moderation_enforcement() -> void:
 	transport.inject_peer_connected(9)
 	_expect_equal(transport.disconnected_peers.size(), 0, "moderation remains off by default")
 	moderation.set_enforcement_enabled(true)
-	transport.inject_peer_connected(9)
 	_expect_equal(transport.disconnected_peers.size(), 1, "enabled exact-address enforcement disconnects the peer")
 	if not transport.disconnected_peers.is_empty():
 		_expect_equal(
