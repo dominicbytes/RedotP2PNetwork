@@ -15,7 +15,7 @@ transport or production deployment profile is certified.
 
 | Surface | Status | Evidence and limits |
 |---|---|---|
-| Secure protocol core | Implemented | Strict binary envelope, registered message allowlist, sender direction, channel/delivery checks, replay rejection, per-peer rate limits, bounded work, and violation disconnects are unit tested. |
+| Secure protocol core | Implemented | Strict binary envelope, registered message allowlist, sender direction, receive-side channel/delivery rejection, replay rejection, per-peer rate limits, and violation disconnects are unit tested. ENet loopback tests exercise packet and byte work budgets; other adapters' work budgets are not directly qualified. |
 | ENet | Implemented | Native two-process core and facade fixtures pass on Windows with Redot 26.2. |
 | WebSocket | Implemented | Native two-process core and facade fixtures pass on loopback. Plain `ws://` is loopback-only and opt-in; production requires TLS/WSS and deployment qualification. |
 | Steam | Provider-gated alpha | Adapter and dynamic `dominicbytes/redot-steam` provider compile without making RedotSteam mandatory. A live private-App-ID authentication fixture is not yet certified. |

@@ -18,6 +18,7 @@ func _run() -> void:
 	await _test_replicated_state_flow()
 	await _test_entity_replication_flow()
 	await _test_moderation_enforcement()
+	await _run_discovered_suites()
 	if _failures.is_empty():
 		print("UNIT_TESTS_PASS")
 		quit(0)
@@ -26,6 +27,24 @@ func _run() -> void:
 		push_error(failure)
 	print("UNIT_TESTS_FAIL count=%d" % _failures.size())
 	quit(1)
+
+
+func _run_discovered_suites() -> void:
+	var files: PackedStringArray = DirAccess.get_files_at("res://tests/suites")
+	files.sort()
+	for file: String in files:
+		if not file.ends_with(".gd"):
+			continue
+		var script: Script = load("res://tests/suites/" + file) as Script
+		if script == null or not script.can_instantiate():
+			_failures.append("suite cannot be loaded: %s" % file)
+			continue
+		var suite: RedotP2PTestSuite = script.new() as RedotP2PTestSuite
+		if suite == null:
+			_failures.append("suite must extend RedotP2PTestSuite: %s" % file)
+			continue
+		await suite.run(self)
+		_failures.append_array(suite.failures)
 
 
 func _test_protocol_limits() -> void:

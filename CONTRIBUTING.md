@@ -30,3 +30,19 @@ Before proposing a change:
 
 Do not commit credentials, Steam tickets, private App IDs, certificates,
 private keys, player addresses, generated packages, or test logs.
+
+## Test suites
+
+Add a script under `tests/suites/` extending `RedotP2PTestSuite` and implement
+`func run(tree: SceneTree) -> void` (it may await). The runner discovers `.gd`
+files in sorted order; new suites require no shared-file edit. Reuse
+`_expect_true`, `_expect_equal`, `_definition`, and `_frame` from the base.
+Commit each new script's engine-generated `.gd.uid` alongside it.
+
+The harness requires completion markers and rejects engine errors and warnings
+in both output streams, even with exit code zero. Every engine run has frame
+and wall-clock bounds; timeouts kill the process tree. The tracked
+`tests/known_engine_diagnostics.txt` starts empty; each future regex needs an
+explanatory comment and may use a version prefix such as `[26.3]`.
+For local environment issues only, pass `-ExtraAllowedDiagnosticsFile` with an
+untracked allowlist in the same format. Never use that option in CI.
