@@ -26,11 +26,27 @@ Delivery values match the adapter enum: unreliable (`0`), ordered-unreliable
 uses native reliable delivery on channel zero but preserves and validates the
 logical channel in this header.
 
-Sequences are scoped to one sender and logical channel and must increase
-strictly. Gaps are allowed; duplicates and older frames are rejected. A sender
-must reconnect before the unsigned 32-bit sequence space is exhausted. This is
-replay/reordering containment within a live session, not cryptographic replay
-protection across authenticated sessions.
+Sequences are scoped to one sender, logical channel, and delivery mode. Senders
+maintain independent counters for each (channel, delivery) pair; receivers keep
+independent state for each (peer, channel, delivery) tuple. Reliable and
+ordered-unreliable sequences must increase strictly. Gaps are allowed.
+
+Unordered unreliable delivery uses a 64-entry sliding replay bitmap. Unseen
+frames up to 63 sequence values behind the highest observed value are accepted;
+duplicates and older frames are dropped. A forward jump of 64 or more resets
+the bitmap. Rejected unordered and ordered-unreliable sequences drop silently
+without a protocol violation. Reliable replays remain protocol violations and
+count toward the configured disconnect threshold.
+
+Rate-limited frames emit `MESSAGE_RATE_LIMITED` without a protocol violation.
+Their sequence is consumed before the rate check, so a throttled frame cannot
+be reused. Other validation failures retain their protocol violation policy.
+
+A sender must reconnect before any unsigned 32-bit counter is exhausted. This
+is replay/reordering containment within a live session, not cryptographic
+replay protection across authenticated sessions. The version-1 wire format is
+unchanged, but both endpoints need these delivery-scoped sequence semantics
+when mixing delivery modes on a logical channel.
 
 The frame provides framing and validation, not encryption, authentication, or
 integrity against an active network attacker. Those properties must come from

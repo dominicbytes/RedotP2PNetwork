@@ -35,6 +35,14 @@ versioning after its public alpha begins.
 - Unsafe arbitrary remote method, signal, property, scene, and node operations
   fail closed while online.
 
+### Fixed
+
+- Scope sequence counters by logical channel and delivery mode, with a 64-frame
+  replay window for unordered unreliable delivery, so reordering cannot discard
+  reliable traffic or disconnect honest peers.
+- Drop stale unreliable frames silently and report rate limits without counting
+  them as protocol violations; throttled sequences remain consumed.
+
 ### Security
 
 - Network frames never deserialize arbitrary Variants or objects.
