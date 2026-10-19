@@ -121,7 +121,20 @@ func send_packet(peer_id: int, packet: PackedByteArray, channel: int, delivery: 
 		return ERR_INVALID_PARAMETER
 	if delivery != Delivery.RELIABLE:
 		return ERR_UNAVAILABLE
-	_peer.set_target_peer(peer_id)
+	if peer_id == 0 and _authority:
+		var broadcast_error: Error = OK
+		for connected_peer_id: int in _connected_peers:
+			var send_error: Error = send_packet(connected_peer_id, packet, channel, delivery)
+			if send_error != OK:
+				broadcast_error = send_error
+		return broadcast_error
+	var target_peer_id: int = 1 if peer_id == 0 else peer_id
+	if not _connected_peers.has(target_peer_id):
+		return ERR_DOES_NOT_EXIST
+	var socket_peer: WebSocketPeer = _peer.get_peer(target_peer_id)
+	if socket_peer == null or socket_peer.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return ERR_UNAVAILABLE
+	_peer.set_target_peer(target_peer_id)
 	_peer.set_transfer_channel(0)
 	_peer.set_transfer_mode(MultiplayerPeer.TRANSFER_MODE_RELIABLE)
 	return _peer.put_packet(packet)
