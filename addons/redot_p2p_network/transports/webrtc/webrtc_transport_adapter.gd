@@ -138,6 +138,8 @@ func disconnect_peer(peer_id: int, reason_code: String = RedotP2PStatusCodes.CON
 		return ERR_INVALID_PARAMETER
 	if not _authority and peer_id != 1:
 		return ERR_UNAUTHORIZED
+	if not _connections.has(peer_id):
+		return ERR_DOES_NOT_EXIST
 	_disconnect_reasons[peer_id] = reason_code
 	_signaling.disconnect_peer(peer_id, reason_code)
 	_peer.remove_peer(peer_id)

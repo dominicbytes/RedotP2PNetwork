@@ -27,7 +27,7 @@ func encode(limits: RedotP2PProtocolLimits) -> PackedByteArray:
 		return PackedByteArray()
 	if channel < 0 or channel >= limits.max_channels:
 		return PackedByteArray()
-	if sequence <= 0:
+	if sequence <= 0 or sequence > 4_294_967_295:
 		return PackedByteArray()
 	if delivery < RedotP2PTransportAdapter.Delivery.UNRELIABLE or delivery > RedotP2PTransportAdapter.Delivery.RELIABLE:
 		return PackedByteArray()
