@@ -1,3 +1,24 @@
-# No engine diagnostics are currently allowed.
-# Each future regex entry must follow a comment explaining why it is benign.
-# An optional [26.3] prefix limits an entry to that engine version.
+# One regex per line, preceded by an explanation. Optional scopes:
+# [engine version prefix][editor-import] limits an entry to that import step.
+
+# Known Redot 26.3-stable headless editor shutdown leak; engine fix submitted.
+# Remove once a fixed engine is pinned. Canvas RID counts vary with editor state.
+[26.3][editor-import] ^WARNING: [1-9][0-9]* RIDs of type "Canvas" were leaked\.$
+# Known Redot 26.3-stable headless editor shutdown leak; engine fix submitted.
+# Remove once a fixed engine is pinned. CanvasItem RID counts vary with editor state.
+[26.3][editor-import] ^WARNING: [1-9][0-9]* RIDs of type "CanvasItem" were leaked\.$
+# Known Redot 26.3-stable headless editor shutdown leak; engine fix submitted.
+# Remove once a fixed engine is pinned. Match only the affected viewport RID type.
+[26.3][editor-import] ^ERROR: [1-9][0-9]* RID allocations of type 'N16RendererViewport8ViewportE' were leaked at exit\.$
+# Known Redot 26.3-stable headless editor shutdown leak; engine fix submitted.
+# Remove once a fixed engine is pinned. Match only the affected dummy texture RID type.
+[26.3][editor-import] ^ERROR: [1-9][0-9]* RID allocations of type 'PN13RendererDummy14TextureStorage12DummyTextureE' were leaked at exit\.$
+# Known Redot 26.3-stable headless editor shutdown leak; engine fix submitted.
+# Remove once a fixed engine is pinned. Match only the affected shaped text RID type.
+[26.3][editor-import] ^ERROR: [1-9][0-9]* RID allocations of type 'PN18TextServerAdvanced22ShapedTextDataAdvancedE' were leaked at exit\.$
+# Known Redot 26.3-stable headless editor shutdown leak; engine fix submitted.
+# Remove once a fixed engine is pinned. Match only the affected font RID type.
+[26.3][editor-import] ^ERROR: [1-9][0-9]* RID allocations of type 'PN18TextServerAdvanced12FontAdvancedE' were leaked at exit\.$
+# Known Redot 26.3-stable headless editor shutdown leak; engine fix submitted.
+# Remove once a fixed engine is pinned. ObjectDB cleanup accompanies the RID leaks.
+[26.3][editor-import] ^WARNING: ObjectDB instances leaked at exit \(run with --verbose for details\)\.$

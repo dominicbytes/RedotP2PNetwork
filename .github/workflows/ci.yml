@@ -1,4 +1,4 @@
-name: Redot 26.2 validation
+name: Redot engine validation
 
 on:
   push:
@@ -13,26 +13,42 @@ jobs:
   windows:
     runs-on: windows-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: '26.2'
+            algorithm: SHA256
+            digest: '4644c7591bbe8019b861deb0ccdb64fd4f59a88514abf7c788cf176c259855af'
+            console: redot.windows.editor.x86_64.console.exe
+          - version: '26.3'
+            algorithm: SHA512
+            digest: '1a4bc6eafc7ce1dab616978f91253605b3e25d6d799deadcf248b07e080aa69610f0dbdbdcaa27f4025b06b6b2af350eff05ac38f5e7c85f3a34048395c037e2'
+            console: redot.windows.editor.x86_64.llvm.console.exe
     steps:
       - name: Check out source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Download pinned Redot 26.2
+      - name: Download pinned Redot ${{ matrix.version }}
         shell: pwsh
         run: |
-          $url = 'https://github.com/Redot-Engine/redot-engine/releases/download/redot-26.2-stable/Redot_v26.2-stable_windows_win64.zip'
-          $expected = '4644c7591bbe8019b861deb0ccdb64fd4f59a88514abf7c788cf176c259855af'
+          $version = '${{ matrix.version }}'
+          $url = "https://github.com/Redot-Engine/redot-engine/releases/download/redot-$version-stable/Redot_v$version-stable_windows_win64.zip"
+          $expected = '${{ matrix.digest }}'
           Invoke-WebRequest -Uri $url -OutFile redot.zip
-          $actual = (Get-FileHash -LiteralPath redot.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $actual = (Get-FileHash -LiteralPath redot.zip -Algorithm '${{ matrix.algorithm }}').Hash.ToLowerInvariant()
           if ($actual -ne $expected) {
             throw "Redot archive digest mismatch: $actual"
           }
           Expand-Archive -LiteralPath redot.zip -DestinationPath .redot
-          $redot = (Get-ChildItem -LiteralPath .redot -Recurse -Filter '*.console.exe' | Select-Object -First 1).FullName
-          if ([string]::IsNullOrWhiteSpace($redot)) {
+          $redot = Get-ChildItem -LiteralPath .redot -Recurse -Filter '${{ matrix.console }}' | Select-Object -First 1
+          if ($null -eq $redot) {
             throw 'Redot console executable was not found in the verified archive.'
           }
-          "REDOT_BIN=$redot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $relativeRedot = Resolve-Path -LiteralPath $redot.FullName -Relative
+          "REDOT_BIN=$relativeRedot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & $relativeRedot --version
+          if ($LASTEXITCODE -ne 0) { throw 'Redot version check failed.' }
 
       - name: Run conformance suite
         shell: pwsh
@@ -46,7 +62,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: redotp2pnetwork-test-logs
+          name: redotp2pnetwork-test-logs-${{ matrix.version }}
           path: tests/.artifacts
           if-no-files-found: ignore
           retention-days: 7

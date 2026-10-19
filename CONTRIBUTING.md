@@ -6,7 +6,7 @@ test or fixture.
 
 ## Development baseline
 
-- Redot 26.2 stable
+- Redot 26.2 LTS and 26.3-stable (both pinned in CI)
 - GDScript only for the core addon
 - Windows is the currently exercised local fixture platform
 - The distributable addon lives only under `addons/redot_p2p_network`
@@ -25,7 +25,7 @@ Before proposing a change:
    methods, signals, properties, resources, or scenes.
 4. Add negative cases for malformed, unauthorized, replayed, and oversized
    input when the change touches a trust boundary.
-5. Run the complete local suite and `git diff --check`.
+5. Run the complete local suite on both supported engines and `git diff --check`.
 6. Update the transport or compatibility matrix when support changes.
 
 Do not commit credentials, Steam tickets, private App IDs, certificates,
@@ -42,7 +42,9 @@ Commit each new script's engine-generated `.gd.uid` alongside it.
 The harness requires completion markers and rejects engine errors and warnings
 in both output streams, even with exit code zero. Every engine run has frame
 and wall-clock bounds; timeouts kill the process tree. The tracked
-`tests/known_engine_diagnostics.txt` starts empty; each future regex needs an
-explanatory comment and may use a version prefix such as `[26.3]`.
+`tests/known_engine_diagnostics.txt` uses commented regexes and optional version
+prefixes such as `[26.3]`. Its temporary `[26.3][editor-import]` entries apply
+only to the known editor shutdown defect; the effective 26.2 allowlist is empty.
+See [engine compatibility](docs/compatibility/redot-versions.md).
 For local environment issues only, pass `-ExtraAllowedDiagnosticsFile` with an
 untracked allowlist in the same format. Never use that option in CI.

@@ -7,7 +7,7 @@ the original `P2PNetwork` and `P2PLobby` names, bounded lobby chat, replicated
 state, explicit entity replication, capability checks, and optional IP or
 identity bans.
 
-This repository is an **alpha implementation for Redot 26.2**. It is suitable
+This repository is an **alpha implementation for Redot 26.2 LTS and 26.3-stable**. It is suitable
 for development and local integration testing, not a claim that every planned
 transport or production deployment profile is certified.
 
@@ -16,8 +16,8 @@ transport or production deployment profile is certified.
 | Surface | Status | Evidence and limits |
 |---|---|---|
 | Secure protocol core | Implemented | Strict binary envelope, registered message allowlist, sender direction, receive-side channel/delivery rejection, replay rejection, per-peer rate limits, and violation disconnects are unit tested. ENet loopback tests exercise packet and byte work budgets; other adapters' work budgets are not directly qualified. |
-| ENet | Implemented | Native two-process core and facade fixtures pass on Windows with Redot 26.2. |
-| WebSocket | Implemented | Native two-process core and facade fixtures pass on loopback. Plain `ws://` is loopback-only and opt-in; production requires TLS/WSS and deployment qualification. |
+| ENet | Implemented | Native two-process core and facade fixtures pass on Windows with Redot 26.2 and 26.3. |
+| WebSocket | Implemented | Native two-process core and facade fixtures pass on Windows loopback with Redot 26.2 and 26.3. Plain `ws://` is loopback-only and opt-in; production requires TLS/WSS and deployment qualification. |
 | Steam | Provider-gated alpha | Adapter and dynamic `dominicbytes/redot-steam` provider compile without making RedotSteam mandatory. A live private-App-ID authentication fixture is not yet certified. |
 | WebRTC | Provider-gated alpha | Authority-star adapter and replaceable signaling, ICE, and peer-factory contracts are present. The installed Redot build has no usable default WebRTC backend, so a real provider fixture is still required. |
 | Lobby discovery directory | Not implemented | Direct/current-lobby behavior works. Public discovery and the optional self-hostable directory remain later milestones. |
@@ -113,7 +113,7 @@ provided.
 
 ## Development and tests
 
-Set `REDOT_BIN` to the Redot 26.2 console executable, then run:
+Set `REDOT_BIN` to a supported Redot 26.2 or 26.3 console executable, then run:
 
 ```powershell
 ./tools/run_tests.ps1 -RedotBin $env:REDOT_BIN
@@ -124,6 +124,13 @@ Build a reviewable addon archive without publishing it:
 ```powershell
 ./tools/package_addon.ps1
 ```
+
+CI tests both pinned engines on Windows. The suite rejects engine diagnostics,
+missing completion markers, nonzero exits, and timeouts. Only the known 26.3
+headless editor shutdown defect has a temporary import-only exception; unit
+tests, fixtures, and quickstart remain strict. See the
+[supported engine versions](docs/compatibility/redot-versions.md) for evidence,
+exception removal conditions, and optional provider limits.
 
 Generated test artifacts and packages are ignored by Git. See
 [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
@@ -137,10 +144,6 @@ Generated test artifacts and packages are ignored by Git. See
 
 The repository retains upstream Git ancestry. The addon path and protocol were
 changed intentionally for Redot and for safer defaults.
-
-## Notes
-
-I vibe coded this in GPT Sol 5.6. Use at your own risk. Actual programmers are welcome to submit PR's and feedback.
 
 ## About Dominic Bytes
 

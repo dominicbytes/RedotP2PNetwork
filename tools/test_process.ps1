@@ -33,7 +33,7 @@ function Wait-TestProcess {
 }
 
 function Get-AllowedEngineDiagnostics {
-    param([string[]]$Files, [string]$EngineVersion)
+    param([string[]]$Files, [string]$EngineVersion, [string]$Step = '')
     foreach ($file in $Files) {
         if ([string]::IsNullOrWhiteSpace($file)) { continue }
         $hasComment = $false
@@ -47,6 +47,10 @@ function Get-AllowedEngineDiagnostics {
                 $versionPrefix = $Matches[1]
                 $entry = $Matches[2]
                 if (-not $EngineVersion.StartsWith($versionPrefix, [StringComparison]::Ordinal)) { continue }
+            }
+            if ($entry -match '^\[editor-import\]\s*(.*)$') {
+                $entry = $Matches[1]
+                if ($Step -ne 'editor-import') { continue }
             }
             $null = [regex]::new($entry)
             $entry
