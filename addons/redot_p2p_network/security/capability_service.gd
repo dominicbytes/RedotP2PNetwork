@@ -35,6 +35,8 @@ func attach(network: RedotP2PNetworkService) -> Error:
 		_network.peer_connected.connect(_on_peer_connected)
 	if not _network.peer_disconnected.is_connected(_on_peer_disconnected):
 		_network.peer_disconnected.connect(_on_peer_disconnected)
+	if not _network.transport_state_changed.is_connected(_on_transport_state_changed):
+		_network.transport_state_changed.connect(_on_transport_state_changed)
 	_roles[1] = ROLE_OWNER
 	return OK
 
@@ -110,6 +112,17 @@ func _on_peer_connected(peer_id: int) -> void:
 
 func _on_peer_disconnected(peer_id: int, _reason_code: String) -> void:
 	clear_peer(peer_id)
+
+
+func _on_transport_state_changed(_previous_state: int, current_state: int, _reason_code: String) -> void:
+	if current_state in [
+		RedotP2PTransportAdapter.State.STARTING,
+		RedotP2PTransportAdapter.State.STOPPED,
+		RedotP2PTransportAdapter.State.FAILED,
+	]:
+		_roles.clear()
+		_custom_capabilities.clear()
+		_roles[1] = ROLE_OWNER
 
 
 func _get_custom_capabilities(peer_id: int) -> Dictionary:
