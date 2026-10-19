@@ -23,3 +23,28 @@ Unsafe compatibility calls set `P2PNetwork.last_status_code` to
 `UNSAFE_LEGACY_API_REJECTED` and emit `network_error` while a session is active.
 Offline local-only behavior remains for a narrow subset so existing setup code
 does not needlessly break.
+
+## Direct lobby behavior
+
+`P2PLobby.get_id()` returns the local player's network ID, matching upstream,
+or `0` when there is no local peer. Use `get_lobby_id()` for the lobby ID.
+
+The facade owns one direct network session. `P2PNetwork.stop()` and authority
+loss clear the current lobby. `P2PLobby.leave_lobby()` stops that session:
+a client disconnects from the authority, and a host disconnects its clients.
+Lobby state is cleared before departure callbacks, so repeated or recursive
+leave calls are harmless.
+
+Lobby chat requests require a current lobby and an admitted sender in its
+roster. A peer refused because the lobby is full remains transport-connected,
+but its chat requests are dropped without broadcast or a local chat signal.
+
+Lobby names are limited to **96 UTF-8 bytes**. The `LobbyData` constructor
+truncates at a complete character boundary to preserve the bounded-name
+behavior without producing snapshots clients reject. Creation rejects names
+changed afterward to exceed the byte limit.
+
+A `P2PNode` owns only its successful entity registration. Registration failures,
+including duplicate IDs, warn and leave the node inactive. Publishing, intents,
+compatibility sync, and cleanup use the ID actually registered even if the
+exported `entity_id` is later changed.

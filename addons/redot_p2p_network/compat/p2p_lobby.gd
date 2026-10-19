@@ -35,6 +35,7 @@ func _ready() -> void:
 		return
 	_network.peer_connected.connect(_on_peer_connected)
 	_network.peer_disconnected.connect(_on_peer_disconnected)
+	_network.disconnect.connect(_clear_lobby)
 	_register_chat_messages()
 	_register_lobby_messages()
 
@@ -44,11 +45,12 @@ func get_self() -> NetPeer:
 
 
 func get_id() -> int:
-	return get_lobby_id()
+	var current_peer: NetPeer = get_self()
+	return 0 if current_peer == null else current_peer.network_id
 
 
 func create_lobby(lobby: LobbyData) -> bool:
-	if lobby == null or lobby.max_memebers < 1:
+	if lobby == null or lobby.max_memebers < 1 or lobby.lobby_name.to_utf8_buffer().size() > 96:
 		return false
 	if _is_network_active() and not _network.is_server():
 		return false
@@ -79,14 +81,20 @@ func join_lobby(lobby_id: int) -> bool:
 
 
 func leave_lobby() -> void:
+	_clear_lobby(true)
+
+
+func _clear_lobby(stop_session: bool = false) -> void:
 	if _lobby == null:
 		return
 	var member_ids: Array[int] = []
 	for member_id_value: Variant in _lobby.get_members().keys():
 		member_ids.append(int(member_id_value))
+	_lobby = null
+	if stop_session and _network != null:
+		_network.stop()
 	for member_id: int in member_ids:
 		player_left_lobby.emit(member_id)
-	_lobby = null
 
 
 func get_lobby_id() -> int:
@@ -218,7 +226,7 @@ func _register_lobby_messages() -> void:
 
 
 func _on_chat_request(sender_id: int, payload: PackedByteArray) -> void:
-	if _network == null or not _network.is_server():
+	if _network == null or not _network.is_server() or _lobby == null or _lobby.get_member(sender_id) == null:
 		return
 	var text: String = _decode_chat_text(payload)
 	if text.is_empty():
@@ -377,6 +385,8 @@ func _on_lobby_member_left(_peer_id: int, payload: PackedByteArray) -> void:
 	var member_id: int = _decode_peer_id(payload)
 	var member: NetPeer = _lobby.get_member(member_id)
 	if member != null and _lobby.leave(member):
+		member.connected = false
+		_network.network_data.remove_peer(member_id)
 		player_left_lobby.emit(member_id)
 		lobby_data_updated.emit(member_id)
 

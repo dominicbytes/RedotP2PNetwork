@@ -280,7 +280,7 @@ func rpc_sync(_obj: Node, _send_type: int = P2P_SEND_TYPE.RELIABLE, _peer: NetPe
 		if not _is_network_active():
 			return true
 		var sync_node: P2PNode = _obj as P2PNode
-		return replication.publish_entity(sync_node.entity_id) == OK
+		return sync_node.publish_replication_state() == OK
 	if _is_network_active():
 		_reject_unsafe_legacy_call()
 		return false

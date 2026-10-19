@@ -27,6 +27,8 @@ func _init(
 ) -> void:
 	lobby_id = id
 	lobby_name = name.left(96)
+	while lobby_name.to_utf8_buffer().size() > 96:
+		lobby_name = lobby_name.left(lobby_name.length() - 1)
 	visablity = visibility
 	max_memebers = clampi(max_members, 1, 128)
 	min_members = clampi(minimum_members, 1, max_memebers)

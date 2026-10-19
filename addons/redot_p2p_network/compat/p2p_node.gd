@@ -6,6 +6,7 @@ extends Node
 @export var destroy_on_disconnect: bool = true
 
 var _network: RedotP2PCompatibilityNetwork = null
+var _registered_entity_id: String = ""
 
 
 func _ready() -> void:
@@ -20,15 +21,18 @@ func _ready() -> void:
 	definition.apply_intent = apply_replication_intent
 	definition.despawn_handler = _on_network_despawn
 	var register_error: Error = _network.replication.register_entity(definition)
-	if register_error != OK and register_error != ERR_ALREADY_EXISTS:
+	if register_error != OK:
 		push_warning("RedotP2PNetwork could not register entity '%s': Error %d" % [entity_id, register_error])
+		return
+	_registered_entity_id = definition.entity_id
 	_network.periodic_sync.connect(_on_periodic_sync)
 	_network.disconnect.connect(_on_network_disconnect)
 
 
 func _exit_tree() -> void:
-	if _network != null and _network.replication != null and not entity_id.is_empty():
-		_network.replication.unregister_entity(entity_id)
+	if _network != null and _network.replication != null and not _registered_entity_id.is_empty():
+		_network.replication.unregister_entity(_registered_entity_id)
+	_registered_entity_id = ""
 
 
 func collect_replication_state() -> Dictionary:
@@ -48,15 +52,15 @@ func apply_replication_intent(_peer_id: int, _intent: Dictionary) -> void:
 
 
 func submit_replication_intent(intent: Dictionary) -> Error:
-	if _network == null or _network.replication == null:
+	if _network == null or _network.replication == null or _registered_entity_id.is_empty():
 		return ERR_UNCONFIGURED
-	return _network.replication.submit_intent(entity_id, intent)
+	return _network.replication.submit_intent(_registered_entity_id, intent)
 
 
 func publish_replication_state() -> Error:
-	if _network == null or _network.replication == null:
+	if _network == null or _network.replication == null or _registered_entity_id.is_empty():
 		return ERR_UNCONFIGURED
-	return _network.replication.publish_entity(entity_id)
+	return _network.replication.publish_entity(_registered_entity_id)
 
 
 func _on_periodic_sync(priority: int) -> void:

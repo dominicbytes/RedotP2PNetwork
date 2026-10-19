@@ -45,6 +45,17 @@ Local/direct lobby creation, roster, and chat are present. Public lobby search
 needs a platform provider or the future optional directory provider. Never
 trust a client to author the canonical lobby roster or chat sender ID.
 
+`P2PLobby.get_id()` is the local player's network ID (`0` without a local
+peer); use `get_lobby_id()` to identify the lobby. The facade has one direct
+session: leaving the lobby ends that session, including all client connections
+when the host leaves. Network stop and authority loss clear the lobby before
+departure callbacks.
+
+`LobbyData` names are capped at **96 UTF-8 bytes**, truncating at a complete
+character boundary during construction. A name modified afterward to exceed
+that limit causes `create_lobby()` to return `false`. Only admitted roster
+members may send lobby chat; transport connection alone is insufficient.
+
 ## 7. Add admission and deployment security
 
 The addon validates protocol messages but does not magically authenticate ENet
