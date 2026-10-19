@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   windows:
+    name: Windows / Redot ${{ matrix.version }}
     runs-on: windows-latest
     timeout-minutes: 20
     strategy:
