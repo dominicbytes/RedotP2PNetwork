@@ -7,6 +7,7 @@ signal state_rejected(peer_id: int, reason_code: String)
 
 const PLAYER_REQUEST: String = "state.player.request"
 const PLAYER_DELTA: String = "state.player.delta"
+const PLAYER_REMOVED: String = "state.player.removed"
 const GAME_DELTA: String = "state.game.delta"
 const SNAPSHOT: String = "state.snapshot"
 const STATE_CHANNEL: int = 2
@@ -31,6 +32,7 @@ func attach(network: RedotP2PNetworkService) -> Error:
 	var definitions: Array[RedotP2PMessageDefinition] = [
 		_definition(PLAYER_REQUEST, _on_player_request, MAX_DELTA_BYTES, true, false, 8.0, 16),
 		_definition(PLAYER_DELTA, _on_player_delta, MAX_DELTA_BYTES, false, true, 32.0, 64),
+		_definition(PLAYER_REMOVED, _on_player_removed, 19, false, true, 32.0, 64),
 		_definition(GAME_DELTA, _on_game_delta, MAX_DELTA_BYTES, false, true, 16.0, 32),
 		_definition(SNAPSHOT, _on_snapshot, MAX_SNAPSHOT_BYTES, false, true, 1.0, 2),
 	]
@@ -40,6 +42,10 @@ func attach(network: RedotP2PNetworkService) -> Error:
 			return register_error
 	if not _network.peer_connected.is_connected(_on_peer_connected):
 		_network.peer_connected.connect(_on_peer_connected)
+	if not _network.peer_disconnected.is_connected(_on_peer_disconnected):
+		_network.peer_disconnected.connect(_on_peer_disconnected)
+	if not _network.transport_state_changed.is_connected(_on_transport_state_changed):
+		_network.transport_state_changed.connect(_on_transport_state_changed)
 	return OK
 
 
@@ -54,9 +60,11 @@ func set_game_data(key: String, value: Variant) -> Error:
 	var delta: Dictionary = {"key": key, "value": value, "revision": str(next_revision)}
 	if not _would_fit_state("game", 0, key, value):
 		return ERR_OUT_OF_MEMORY
-	_apply_game_delta(delta)
 	if _is_network_active():
-		return _send_json(GAME_DELTA, delta, 0, MAX_DELTA_BYTES)
+		var send_error: Error = _send_json(GAME_DELTA, delta, 0, MAX_DELTA_BYTES)
+		if send_error != OK:
+			return send_error
+	_apply_game_delta(delta)
 	return OK
 
 
@@ -112,9 +120,11 @@ func _set_authoritative_player_data(peer_id: int, key: String, value: Variant) -
 		"value": value,
 		"revision": str(_next_revision(revision_key)),
 	}
-	_apply_player_delta(delta)
 	if _is_network_active():
-		return _send_json(PLAYER_DELTA, delta, 0, MAX_DELTA_BYTES)
+		var send_error: Error = _send_json(PLAYER_DELTA, delta, 0, MAX_DELTA_BYTES)
+		if send_error != OK:
+			return send_error
+	_apply_player_delta(delta)
 	return OK
 
 
@@ -141,6 +151,18 @@ func _on_player_delta(_peer_id: int, payload: PackedByteArray) -> void:
 	var delta: Dictionary = _decode_dictionary(payload, MAX_DELTA_BYTES)
 	if _valid_player_delta(delta):
 		_apply_player_delta(delta)
+
+
+func _on_player_removed(_peer_id: int, payload: PackedByteArray) -> void:
+	if _is_local_authority() or payload.is_empty() or payload.size() > 19:
+		return
+	for byte_value: int in payload:
+		if byte_value < 0x30 or byte_value > 0x39:
+			return
+	var peer_text: String = payload.get_string_from_utf8()
+	if not _is_decimal_string(peer_text, true) or str(int(peer_text)) != peer_text:
+		return
+	_remove_player_data(int(peer_text))
 
 
 func _on_game_delta(_peer_id: int, payload: PackedByteArray) -> void:
@@ -195,6 +217,30 @@ func _on_peer_connected(peer_id: int) -> void:
 		"revisions": revisions_wire,
 	}
 	_send_json(SNAPSHOT, snapshot, peer_id, MAX_SNAPSHOT_BYTES)
+
+
+func _on_peer_disconnected(peer_id: int, _reason_code: String) -> void:
+	if not _network.is_authority():
+		if peer_id == 1:
+			reset()
+		return
+	_remove_player_data(peer_id)
+	if _is_network_active():
+		_network.send_message(PLAYER_REMOVED, str(peer_id).to_utf8_buffer(), 0,
+			STATE_CHANNEL, RedotP2PTransportAdapter.Delivery.RELIABLE)
+
+
+func _on_transport_state_changed(_previous_state: int, current_state: int, _reason_code: String) -> void:
+	if current_state in [RedotP2PTransportAdapter.State.STOPPED, RedotP2PTransportAdapter.State.FAILED]:
+		reset()
+
+
+func _remove_player_data(peer_id: int) -> void:
+	_player_data.erase(peer_id)
+	var prefix: String = "p:%d:" % peer_id
+	for revision_key: Variant in _revisions.keys():
+		if str(revision_key).begins_with(prefix):
+			_revisions.erase(revision_key)
 
 
 func _apply_player_delta(delta: Dictionary) -> void:
@@ -313,8 +359,13 @@ func _would_fit_state(kind: String, peer_id: int, key: String, value: Variant) -
 	var revisions_wire: Dictionary = {}
 	for revision_key: Variant in _revisions.keys():
 		revisions_wire[str(revision_key)] = str(int(_revisions[revision_key]))
+	var next_key: String = "g:%s" % key if kind == "game" else "p:%d:%s" % [peer_id, key]
+	revisions_wire[next_key] = str(_next_revision(next_key))
 	var candidate: Dictionary = {"game": game_copy, "players": players_wire, "revisions": revisions_wire}
-	return JSON.stringify(candidate).to_utf8_buffer().size() <= MAX_SNAPSHOT_BYTES
+	return (
+		RedotP2PJsonValue.is_safe(candidate)
+		and JSON.stringify(candidate).to_utf8_buffer().size() <= MAX_SNAPSHOT_BYTES
+	)
 
 
 func _valid_key_value(key: String, value: Variant) -> bool:
