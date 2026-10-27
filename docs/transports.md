@@ -61,6 +61,31 @@ The capability model reports channel support as a boolean and has no numeric
 channel-count field. Live Steam lane delivery, callback pumping, and client
 reinitialization still require a matching RedotSteam context and Steam client.
 
+### Required RedotSteam version and settings
+
+Use RedotSteam at commit `3d51b26` (`main`, 2026-10-27) or later. That release
+hardens `SteamMultiplayerPeer`: no Steam calls after shutdown, bounded receive
+memory, pending-connection limits, and handshake deadlines. Older builds still
+work with this adapter, but they lack those protections.
+
+That release adds these project settings, which both sides of a session should
+share:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `steam/multiplayer_peer/max_message_size` | 524288 | Largest message Steam accepts; a peer that sends more is disconnected. Keep it at least the protocol's `max_frame_bytes` (default 65536, hard maximum 262144). |
+| `steam/multiplayer_peer/max_queued_bytes` | 8388608 | Received bytes the native peer queues before it stops reading. |
+| `steam/multiplayer_peer/max_pending_connections` | 32 | New incoming connections are refused while this many are still handshaking. Outgoing lobby-mesh connections count toward it, so raise it for lobbies larger than about 24. |
+| `steam/multiplayer_peer/handshake_timeout_ms` | 15000 | A connection that hasn't completed its handshake by then is closed; a client whose host never answers gives up. |
+
+Since that release, a forced native `disconnect_peer` no longer emits
+`peer_disconnected`. The adapter's own `disconnect_peer` already reports the
+disconnect itself, so adapter users see no change.
+
+The adapter drops packets from senders it has not admitted: peers already
+disconnected, rejected for capacity, or never connected. Each one raises
+`transport_error` with `MESSAGE_UNAUTHORIZED`.
+
 ## WebRTC providers
 
 Games must provide:
