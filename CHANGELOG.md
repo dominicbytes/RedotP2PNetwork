@@ -23,6 +23,15 @@ versioning after its public alpha begins.
 ### Fixed
 
 - WebSocket disconnect broadcasts no longer send through closing sockets.
+- The Steam adapter drops packets from senders it has not admitted (already
+  disconnected, rejected for capacity, or never connected) and reports
+  `MESSAGE_UNAUTHORIZED`.
+
+### Documentation
+
+- The Steam transport documents the required RedotSteam version (`3d51b26` or
+  later) and its new `steam/multiplayer_peer/*` settings. See
+  `docs/transports.md`.
 
 ### Changed
 
