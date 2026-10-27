@@ -191,6 +191,12 @@ func _process(_delta: float) -> void:
 		_inside_transport_process = false
 		_apply_pending_stop()
 		return
+	_drain_packets()
+	_inside_transport_process = false
+	_apply_pending_stop()
+
+
+func _drain_packets() -> void:
 	var packet_count: int = 0
 	var byte_count: int = 0
 	while _peer.get_available_packet_count() > 0:
@@ -202,6 +208,10 @@ func _process(_delta: float) -> void:
 		var packet: PackedByteArray = _peer.get_packet()
 		packet_count += 1
 		byte_count += packet.size()
+		if not _connected_peers.has(sender_id):
+			# Stale (connection already closed) or never admitted; never surface it.
+			transport_error.emit(RedotP2PStatusCodes.MESSAGE_UNAUTHORIZED)
+			continue
 		if packet.is_empty() or packet.size() > _limits.max_frame_bytes:
 			transport_error.emit(RedotP2PStatusCodes.FRAME_TOO_LARGE)
 			if sender_id > 0:
@@ -213,8 +223,6 @@ func _process(_delta: float) -> void:
 		packet_received.emit(sender_id, packet, packet_channel, packet_delivery)
 		if _stop_pending:
 			break
-	_inside_transport_process = false
-	_apply_pending_stop()
 
 
 func _begin_start() -> Error:
