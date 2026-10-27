@@ -34,12 +34,45 @@ class PeerDouble extends MultiplayerPeerExtension:
 		closed = true
 
 
+class ReceiveDouble extends MultiplayerPeerExtension:
+	var queue: Array[Dictionary] = []
+
+
+	func _get_available_packet_count() -> int:
+		return queue.size()
+
+
+	func _get_packet_peer() -> int:
+		return int(queue[0]["sender"])
+
+
+	func _get_packet_channel() -> int:
+		return 0
+
+
+	func _get_packet_mode() -> MultiplayerPeer.TransferMode:
+		return MultiplayerPeer.TRANSFER_MODE_RELIABLE
+
+
+	func _get_packet_script() -> PackedByteArray:
+		return queue.pop_front()["data"] as PackedByteArray
+
+
+	func _get_max_packet_size() -> int:
+		return 65_536
+
+
+	func _close() -> void:
+		pass
+
+
 func run(tree: SceneTree) -> void:
 	_test_free_outside_tree()
 	_test_tree_exit(tree)
 	await _test_queue_free(tree)
 	_test_stop_idempotence()
 	_test_channels()
+	_test_unknown_sender()
 
 
 func _seed_lease(adapter: RedotP2PSteamTransportAdapter, external: bool = false) -> RedotP2PRedotSteamProvider:
@@ -136,5 +169,31 @@ func _check_channels(lanes: int, protocol_channels: int, label: String) -> void:
 			if valid:
 				_expect_equal(peer.sent_channels[-1], channel, label + " preserves the lane")
 	_expect_equal(adapter.send_packet(2, PackedByteArray([1]), 0, RedotP2PTransportAdapter.Delivery.UNRELIABLE_ORDERED), ERR_UNAVAILABLE if lanes > 0 else ERR_INVALID_PARAMETER, label + " ordered unreliable remains unsupported")
+	adapter.stop()
+	adapter.free()
+
+
+func _test_unknown_sender() -> void:
+	var adapter: RedotP2PSteamTransportAdapter = RedotP2PSteamTransportAdapter.new()
+	var provider: RedotP2PRedotSteamProvider = RedotP2PRedotSteamProvider.new()
+	_expect_equal(adapter.set_provider(provider), OK, "unknown sender provider attaches")
+	_expect_equal(adapter.configure(RedotP2PProtocolLimits.new()), OK, "unknown sender limits configure")
+	var peer: ReceiveDouble = ReceiveDouble.new()
+	adapter._peer = peer
+	adapter._state = RedotP2PTransportAdapter.State.CONNECTED
+	adapter._connected_peers[2] = true
+	peer.queue = [
+		{"sender": -1, "data": PackedByteArray([1])},
+		{"sender": 7, "data": PackedByteArray([2])},
+		{"sender": 2, "data": PackedByteArray([3])},
+	]
+	var received: Array[int] = []
+	var errors: Array[String] = []
+	adapter.packet_received.connect(func(sender_id: int, _packet: PackedByteArray, _channel: int, _delivery: int) -> void: received.append(sender_id))
+	adapter.transport_error.connect(func(code: String) -> void: errors.append(code))
+	adapter._drain_packets()
+	_expect_equal(received, [2] as Array[int], "only connected senders reach packet_received")
+	_expect_equal(errors.count(RedotP2PStatusCodes.MESSAGE_UNAUTHORIZED), 2, "unknown senders are reported")
+	_expect_equal(peer.queue.size(), 0, "unknown-sender packets are consumed, not left at the queue head")
 	adapter.stop()
 	adapter.free()
